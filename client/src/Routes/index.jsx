@@ -1,6 +1,7 @@
 import App from "@/App";
 import Home from "@/Home";
 import Login from "@/Login";
+import PrivateRoute from "@/PrivateRoute";
 import SignUp from "@/SignUp";
 import { createBrowserRouter } from "react-router-dom";
 
@@ -12,7 +13,7 @@ const router = createBrowserRouter([
         children: [
             {
                 path: "",
-                element: <Home />
+                element: <PrivateRoute><Home /></PrivateRoute>
             },
             {
                 path: "login",

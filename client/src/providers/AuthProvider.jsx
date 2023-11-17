@@ -1,65 +1,79 @@
 import supabse from '@/configs/supabase.config';
+import useAxiosPublic from '@/hooks/useAxiosPublic';
 import React, { createContext, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 export const AuthContext = createContext({});
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [userLoading, setUserLoading] = useState(true);
+    const axiosPublic = useAxiosPublic();
 
 
 
 
-    const signOut = () => {
+    const signOut = async () => {
         setUserLoading(true);
-        supabse.auth.signOut({ scope: "global" }).then((value) => {
-            console.log(value);
-            setUserLoading(false);
-        }).catch((err) => {
-            throw new Error({ error: true, message: err });
-        });
+        toast.loading("Signing Out");
+        await supabse.auth.signOut({ scope: "global" });
+        setUserLoading(false);
+        localStorage.removeItem("userEmail");
+        toast.success("Successfully signed out");
+
     };
-    const signUp = (email, password, username, phone) => {
-        console.log(email, password, username, phone);
+    const signUp = async (email, password, username, phone, profile) => {
+
         setUserLoading(true);
-        supabse.auth.signUp({ email, password, phone, options: { data: { username: username }, } }).then((value) => {
-            setUserLoading(false);
-            return value;
-        });
+        toast.loading("Signin Up");
+        const data = await supabse.auth.signUp({ email, password, options: { data: { full_name: username, phone: phone, picture: profile } } });
+        setUserLoading(false);
+        if (data.error) {
+            toast.error(data.error.message);
+            return false;
+        } else {
+            toast.success("Successfully Signed Up");
+        }
+        return true;
     };
 
     const signIn = async (email, password) => {
         setUserLoading(true);
+        toast.loading("Signing In");
         const data = await supabse.auth.signInWithPassword({ email, password });
         setUserLoading(false);
-        return data;
+        if (data.error) {
+            toast.error(data.error.message);
+        } else {
+            toast.success("Successfully Logged In");
+        }
     };
-    const socialLogin = (provider) => {
+    const socialLogin = async (provider) => {
         setUserLoading(true);
-        supabse.auth.signInWithOAuth({ provider, options: { scopes: "global" } }).then((value) => {
-            setUserLoading(false);
-            return value;
-        }).catch((err) => {
-            throw new Error({ error: true, message: err });
-        });
+        const data = await supabse.auth.signInWithOAuth({ provider });
+        setUserLoading(false);
+
     };
-    useEffect(() => {
-        console.log(user);
-    }, [user]);
+
 
 
     useEffect(() => {
 
-        const { data } = supabse.auth.onAuthStateChange((event, session) => {
-            if (event === 'INITIAL_SESSION') {
-                setUserLoading(true);
-            } else if (event === 'SIGNED_IN') {
-                setUser(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                setUser(null);
-            } else {
-                setUser(session.user);
+        const { data } = supabse.auth.onAuthStateChange(async (event, session) => {
+            setUserLoading(true);
+            const user = session?.user || null;
+
+            if (user) {
+                try {
+                    await axiosPublic.put('/auth/login', user);
+                    localStorage.setItem("userEmail", user.email);
+
+                } catch (err) {
+                    console.log(err);
+                }
             }
+            setUser(user);
+            setUserLoading(false);
         });
         return () => {
             data.subscription.unsubscribe();
