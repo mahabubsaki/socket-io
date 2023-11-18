@@ -1,9 +1,11 @@
 import supabse from '@/configs/supabase.config';
 import useAxiosPublic from '@/hooks/useAxiosPublic';
 import React, { createContext, useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 
 export const AuthContext = createContext({});
+const socket = io(import.meta.env.VITE_API);
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -65,14 +67,16 @@ const AuthProvider = ({ children }) => {
 
             if (user) {
                 try {
-                    await axiosPublic.put('/auth/login', user);
+                    const { data } = await axiosPublic.put('/auth/login', user);
+                    setUser(data);
                     localStorage.setItem("userEmail", user.email);
 
                 } catch (err) {
                     console.log(err);
                 }
+            } else {
+                setUser(null);
             }
-            setUser(user);
             setUserLoading(false);
         });
         return () => {
@@ -86,7 +90,8 @@ const AuthProvider = ({ children }) => {
         signOut,
         signUp,
         signIn,
-        socialLogin
+        socialLogin,
+        socket
     };
     return (
         <AuthContext.Provider value={authInfo}>

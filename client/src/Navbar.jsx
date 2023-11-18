@@ -12,8 +12,8 @@ const Navbar = () => {
 
     };
     return (
-        <nav className='py-4 flex justify-between items-center bg-zinc-300'>
-            <p>Socket</p>
+        <nav className='py-4 flex justify-between items-center bg-zinc-300 p-4'>
+            <Link to={'/'}> <p>Socket</p></Link>
             <div className='flex gap-4'>
                 {!user ? <>
                     <Link to={'/login'}>Login</Link>

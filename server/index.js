@@ -27,6 +27,8 @@ const client = new MongoClient(process.env.MONGO_URI, {
 });
 const usersCollection = client.db('Chat-App').collection('users');
 const friendReqCollection = client.db("Chat-App").collection("friend-request");
+const friendShipCollection = client.db("Chat-App").collection("friend-ship");
+const chatCollection = client.db("Chat-App").collection("chats");
 
 
 app.get('/', async (req, res) => {
@@ -38,14 +40,15 @@ app.get('/', async (req, res) => {
 app.put('/auth/login', async (req, res) => {
     const user = req.body;
     const filter = { email: user.email };
-    const result = await usersCollection.updateOne(filter, {
+    const result = await usersCollection.findOneAndUpdate(filter, {
         $set: {
             ...user
         },
         $currentDate: {
             lastModified: true,
         },
-    }, { upsert: true });
+    }, { upsert: true, returnDocument: 'after' });
+
     return res.send(result);
 });
 
@@ -60,6 +63,24 @@ app.post('/users/send-request', async (req, res) => {
         }
     } catch (err) {
         return res.send({ error: true, message: err.message });
+    }
+});
+
+app.post('/users/accept-request', async (req, res) => {
+    const { friends, senderEmail } = req.body;
+    const session = client.startSession();
+    try {
+        await session.withTransaction(async () => {
+            await friendShipCollection.insertMany(friends, { session });
+            await friendReqCollection.deleteOne({ sender: senderEmail }, { session });
+            return res.send({ message: "Successfully accepted friend request", success: true });
+        });
+    } catch (err) {
+        console.log(err);
+        await session.abortTransaction();
+        return res.send({ error: true, message: err.message });
+    } finally {
+        await session.endSession();
     }
 });
 app.get('/users/all', async (req, res) => {
@@ -163,10 +184,118 @@ app.get('/users/all', async (req, res) => {
                 receivedFriendRequests: 0
             }
         },
+        {
+            $lookup: {
+                from: 'friend-ship',
+                let: { friendEmail: '$email' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ['$author', requesterEmail] },
+                                    { $eq: ['$friend', '$$friendEmail'] }
+                                ]
+                            }
+                        }
+                    }
+                ],
+                as: 'friendship'
+            }
+        },
+        {
+            $match: {
+                'friendship': { $eq: [] }
+            }
+        },
+
     ];
 
     const result = await usersCollection.aggregate(pipeline).toArray();
     res.send(result);
+});
+app.get('/users/friends', async (req, res) => {
+    const requesterEmail = req.headers.email;
+    const pipeline = [{ $match: { author: requesterEmail } }, {
+        $addFields: {
+            convertedUserId: {
+                $toObjectId: "$userId"
+            }
+        }
+    }, {
+        $lookup: {
+            from: "users",
+            localField: "convertedUserId",
+            foreignField: "_id",
+            as: "userDetails"
+        },
+
+    },
+    {
+        $unwind: "$userDetails"
+    },
+    {
+        $project: {
+            _id: 0,
+            timestamp: 1,
+            "userDetails._id": 1,
+            "userDetails.email": 1,
+            "userDetails.lastModified": 1,
+            "userDetails.last_sign_in_at": 1,
+            'userDetails.user_metadata.full_name': 1,
+            'userDetails.user_metadata.picture': 1,
+        }
+    }
+    ];
+    const result = await friendShipCollection.aggregate(pipeline).toArray();
+    res.send(result);
+});
+app.get('/users/check-friendship/:id', async (req, res) => {
+    const userId = req.params.id;
+    const author = req.headers.email;
+    try {
+        const ifFriend = await friendShipCollection.findOne({ author, userId });
+        return res.send({ isFriend: ifFriend ? true : false });
+    } catch (err) {
+        return res.send({ error: true, message: "Error Getting Friend Info" });
+    }
+});
+app.get('/chats/room-messages/:id', async (req, res) => {
+    const room = req.params.id;
+    const pipeline = [{ $match: { room: room } }, {
+        $addFields: {
+            convertedUserId: {
+                $toObjectId: "$author"
+            }
+        }
+    }, {
+        $lookup: {
+            from: "users",
+            localField: "convertedUserId",
+            foreignField: "_id",
+            as: "userDetails"
+        },
+
+    },
+    {
+        $unwind: "$userDetails"
+    },
+    {
+        $project: {
+            time: 1,
+            user: 1,
+            author: 1,
+            room: 1,
+            message: 1,
+            "userDetails.email": 1,
+            'userDetails.user_metadata.full_name': 1,
+            'userDetails.user_metadata.picture': 1,
+        }
+    }
+    ];
+    const result = await chatCollection.aggregate(pipeline).toArray();
+
+    return res.send(result);
 });
 
 server.listen(port, () => {
@@ -184,18 +313,17 @@ server.listen(port, () => {
 
 
 
-
 io.on("connection", socket => {
-    console.log('connected user ' + socket.id);
+    // console.log('connected user ' + socket.id);
     socket.on('disconnect', () => {
-        console.log('disconnected user ' + socket.id);
+        // console.log('disconnected user ' + socket.id);
     });
     socket.on('join_room', (roomid) => {
         socket.join(roomid);
-        console.log(`user with id ${socket.id} joined room with id ${roomid}`);
+        // console.log(`user with id ${socket.id} joined room with id ${roomid}`);
     });
-    socket.on('send_message', data => {
-        console.log(data);
+    socket.on('send_message', async (data) => {
+        await chatCollection.insertOne(data);
         socket.to(data.room).emit("recieve_message", data);
     });
 });
