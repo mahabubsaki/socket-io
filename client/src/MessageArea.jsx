@@ -19,11 +19,12 @@ const MessageArea = ({ id }) => {
 
     const formRef = useRef();
     const [roomId, setRoomId] = useState(null);
-    const { data: loadedMessage = [], isLoading, error } = useGetRoomMessages(roomId);
+    const { data: loadedMessage = [], isLoading, error, refetch } = useGetRoomMessages(roomId);
 
     const loading = isLoading && roomId;
     const refs = useRef();
     const [messages, setMessages] = useState([]);
+    console.log(messages);
     useEffect(() => {
         if (loadedMessage.length > 0 && roomId) {
             setMessages(loadedMessage);
@@ -63,6 +64,7 @@ const MessageArea = ({ id }) => {
 
         if (socket) {
             const receiveMessage = (data) => {
+                console.log(data);
                 setMessages(prev => [...prev, data]);
             };
 
@@ -89,6 +91,7 @@ const MessageArea = ({ id }) => {
         await socket.emit("send_message", messageData);
         setMessages(pre => [...pre, messageData]);
         scrollIntoView();
+        refetch();
 
     };
     const handleFormSubmit = async (e) => {
@@ -126,7 +129,7 @@ const MessageArea = ({ id }) => {
 
     return (
         <>
-
+            <p>{isConnected ? 'connected' : 'not connected'}</p>
             <ScrollArea className="h-[calc(100vh-180px)] pb-1" >
 
 

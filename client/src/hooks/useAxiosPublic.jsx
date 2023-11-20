@@ -5,7 +5,7 @@ import { useEffect } from "react";
 
 
 const axiosPublic = axios.create({
-    baseURL: import.meta.env.VITE_API
+    baseURL: process.env.NODE_ENV === 'production' ? import.meta.env.VITE_API_PROD : import.meta.env.VITE_API_DEV
 });
 const useAxiosPublic = () => {
 

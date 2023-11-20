@@ -3,19 +3,19 @@ import { Server } from 'socket.io';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
+dotenv.config();
 
 const app = express();
 const port = 5000;
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:5173'
+        origin: process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : 'https://beautiful-gaufre-471191.netlify.app',
     }
 });
 
 
-dotenv.config();
 app.use(cors());
 app.use(express.json());
 
@@ -324,6 +324,7 @@ io.on("connection", socket => {
     });
     socket.on('send_message', async (data) => {
         await chatCollection.insertOne(data);
-        socket.to(data.room).emit("recieve_message", data);
+        const user = await usersCollection.findOne({ _id: new ObjectId(data.author) });
+        socket.to(data.room).emit("recieve_message", { ...data, userDetails: { email: user.email, user_metadata: { full_name: user.user_metadata.full_name, picture: user.user_metadata.picture } } });
     });
 });

@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 
 export const AuthContext = createContext({});
-const socket = io(import.meta.env.VITE_API);
+const socket = io(process.env.NODE_ENV === 'production' ? import.meta.env.VITE_API_PROD : import.meta.env.VITE_API_DEV);
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
